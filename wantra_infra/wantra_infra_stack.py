@@ -1,8 +1,12 @@
 from aws_cdk import (
     # Duration,
     Stack,
-    aws_ec2 as ec2
+    aws_iam as iam,
+    aws_ec2 as ec2,
+    CfnOutput,
+    Tags
 )
+
 from constructs import Construct
 
 class WantraInfraStack(Stack):
@@ -35,7 +39,14 @@ class WantraInfraStack(Stack):
             "usermod -a -G docker ec2-user",
             "chkconfig docker on"
         )
-
+        # IAM Role para la instancia
+        instance_role = iam.Role(
+            self, "WantraInstanceRole",
+            assumed_by=iam.ServicePrincipal("ec2.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonEC2ContainerRegistryReadOnly")
+            ]
+        )
         # EC2 con Amazon Linux 2 (ARM64)
         instance = ec2.Instance(
             self, "WantraInstance",
@@ -46,8 +57,15 @@ class WantraInfraStack(Stack):
             vpc=vpc,
             security_group=sg,
             key_name=key_name
-            user_data=user_data_script
+            user_data=user_data_script,
+            role=instance_role
         )
-
+        # Output de la IP pública
+        CfnOutput(
+            self, "InstancePublicIP",
+            value=instance.instance_public_ip,
+            description="Public IP of the EC2 instance"
+        )
+        Tags.of(instance).add("Project", "Wantra")
         # Imprime la IP para usarla con Kamal
         self.instance_public_ip = instance.instance_public_ip
