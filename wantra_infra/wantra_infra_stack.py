@@ -15,7 +15,20 @@ class WantraInfraStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         # VPC básica
-        vpc = ec2.Vpc(self, "WantraVPC", max_azs=2)
+        vpc = ec2.Vpc(
+            self, 
+            "WantraVPC",
+            cidr="10.100.0.0/16", 
+            nat_gateways=0,
+            subnet_configuration=[
+                ec2.SubnetConfiguration(
+                    cidr_mask=24,
+                    name="PublicSubnet",
+                    subnet_type=ec2.SubnetType.PUBLIC
+                ),
+            ],
+            restrict_default_security_group=False
+        )
 
         # Security Group para la instancia
         sg = ec2.SecurityGroup(
@@ -56,16 +69,15 @@ class WantraInfraStack(Stack):
             ),
             vpc=vpc,
             security_group=sg,
-            key_name=key_name
+            key_name=key_name,
             user_data=user_data_script,
-            role=instance_role
+            role=instance_role,
+            associate_public_ip_address=True
         )
-        # Output de la IP pública
-        CfnOutput(
-            self, "InstancePublicIP",
-            value=instance.instance_public_ip,
-            description="Public IP of the EC2 instance"
-        )
+        CfnOutput(self, "EC2PublicIP", value=instance.instance.attr_public_ip)
+        instance.connections.allow_from(ec2.Peer.any_ipv4(), ec2.Port.tcp(80))
+
+        instance.connections.allow_from(ec2.Peer.any_ipv4(), ec2.Port.tcp(22))
         Tags.of(instance).add("Project", "Wantra")
         # Imprime la IP para usarla con Kamal
-        self.instance_public_ip = instance.instance_public_ip
+
